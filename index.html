@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova Terminal</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0e27;
+            color: #00ff88;
+            font-family: 'Courier New', monospace;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            width: 100vw;
+            overflow: hidden;
+        }
+
+        .header {
+            background: #0f1419;
+            border-bottom: 2px solid #00ff88;
+            padding: 12px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .header h1 {
+            font-size: 14px;
+            letter-spacing: 1px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 12px;
+            gap: 8px;
+            overflow: hidden;
+        }
+
+        textarea {
+            flex: 0 0 80px;
+            background: #1a2332;
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            resize: none;
+            -webkit-appearance: none;
+        }
+
+        textarea::placeholder {
+            color: #00ff8844;
+        }
+
+        .controls {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        select {
+            flex: 1;
+            min-width: 80px;
+            background: #1a2332;
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            padding: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            cursor: pointer;
+            -webkit-appearance: none;
+        }
+
+        button {
+            background: #00ff88;
+            border: none;
+            color: #0a0e27;
+            padding: 10px 12px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            border-radius: 3px;
+            flex: 0 0 auto;
+            -webkit-appearance: none;
+        }
+
+        button:active {
+            opacity: 0.8;
+        }
+
+        button.danger {
+            background: #ff3333;
+            color: white;
+        }
+
+        #terminal {
+            flex: 1;
+            background: #0a0e27;
+            border: 1px solid #00ff8844;
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 11px;
+            line-height: 1.4;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            word-break: break-all;
+        }
+
+        .output-line {
+            margin-bottom: 2px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .success {
+            color: #00ff88;
+        }
+
+        .error {
+            color: #ff3333;
+        }
+
+        .info {
+            color: #88ccff;
+        }
+
+        .loading {
+            color: #ffaa33;
+        }
+
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #00ff88;
+            border-radius: 2px;
+        }
+
+        @media (min-width: 769px) {
+            body {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>NOVA TERMINAL</h1>
+    </div>
+
+    <div class="container">
+        <textarea id="input" placeholder="Ketik command..." spellcheck="false"></textarea>
+
+        <div class="controls">
+            <select id="mode">
+                <option value="python">Python</option>
+                <option value="shell">Shell</option>
+                <option value="fetch">Fetch</option>
+                <option value="context">Context</option>
+                <option value="search">Search</option>
+            </select>
+            <button id="execute">RUN</button>
+            <button id="clear" class="danger">CLEAR</button>
+        </div>
+
+        <div id="terminal"></div>
+    </div>
+
+    <script>
+        const terminal = document.getElementById('terminal');
+        const input = document.getElementById('input');
+        const modeSelect = document.getElementById('mode');
+        const executeBtn = document.getElementById('execute');
+        const clearBtn = document.getElementById('clear');
+        const BASE_URL = 'https://downloder-amber.vercel.app';
+
+        let isExecuting = false;
+
+        function encodeURL(str) {
+            return encodeURIComponent(str);
+        }
+
+        function escapeOutput(text) {
+            if (!text) return '';
+            return String(text)
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function print(text, type = 'info') {
+            const line = document.createElement('div');
+            line.className = `output-line ${type}`;
+            line.textContent = escapeOutput(text);
+            line.style.fontFamily = "'Courier New', monospace";
+            terminal.appendChild(line);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        executeBtn.addEventListener('click', async () => {
+            if (isExecuting) return;
+
+            const code = input.value.trim();
+            if (!code) {
+                print('Error: Input kosong!', 'error');
+                return;
+            }
+
+            const mode = modeSelect.value;
+            isExecuting = true;
+            executeBtn.disabled = true;
+
+            const preview = code.length > 40 ? code.substring(0, 40) + '...' : code;
+            print('> ' + mode + ': ' + preview, 'info');
+            print('Executing...', 'loading');
+
+            try {
+                let url;
+
+                if (mode === 'python') {
+                    url = BASE_URL + '/api?code=' + encodeURL(code) + '&timeout=25';
+                } else if (mode === 'shell') {
+                    url = BASE_URL + '/api?code=' + encodeURL('!' + code) + '&timeout=25';
+                } else if (mode === 'fetch') {
+                    url = BASE_URL + '/api/fetch?url=' + encodeURL(code) + '&parse=auto';
+                } else if (mode === 'context') {
+                    url = BASE_URL + '/api/context';
+                } else if (mode === 'search') {
+                    url = BASE_URL + '/api/search?summary=' + encodeURL(code);
+                }
+
+                if (terminal.lastChild) {
+                    terminal.removeChild(terminal.lastChild);
+                }
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (response.ok) {
+                    print('OK', 'success');
+                    
+                    if (data.output) {
+                        print(data.output, 'success');
+                    }
+                    if (data.message) {
+                        print(data.message, 'success');
+                    }
+                    if (data.context) {
+                        print(JSON.stringify(data.context, null, 2), 'success');
+                    }
+                    if (data.search_data && Array.isArray(data.search_data)) {
+                        data.search_data.forEach(item => {
+                            print('- ' + (item.title || 'No title'), 'success');
+                            if (item.summary) {
+                                const summary = item.summary.substring(0, 100);
+                                print('  ' + summary, 'info');
+                            }
+                        });
+                    }
+                    if (!data.output && !data.message && !data.context && !data.search_data) {
+                        print(JSON.stringify(data, null, 2), 'success');
+                    }
+                } else {
+                    print('Error: ' + (data.error || 'Unknown error'), 'error');
+                    if (data.details) {
+                        print(data.details, 'error');
+                    }
+                }
+            } catch (error) {
+                if (terminal.lastChild) {
+                    terminal.removeChild(terminal.lastChild);
+                }
+                print('Error: ' + error.message, 'error');
+            } finally {
+                isExecuting = false;
+                executeBtn.disabled = false;
+            }
+        });
+
+        clearBtn.addEventListener('click', () => {
+            terminal.innerHTML = '';
+            input.value = '';
+        });
+
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                executeBtn.click();
+            }
+        });
+
+        print('Nova Terminal Ready', 'success');
+    </script>
+</body>
+</html>
