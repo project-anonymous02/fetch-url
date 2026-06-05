@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova Terminal</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0e27;
+            color: #00ff88;
+            font-family: 'Courier New', monospace;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            width: 100vw;
+            overflow: hidden;
+        }
+
+        .header {
+            background: #0f1419;
+            border-bottom: 2px solid #00ff88;
+            padding: 12px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .header h1 {
+            font-size: 14px;
+            letter-spacing: 1px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 12px;
+            gap: 8px;
+            overflow: hidden;
+        }
+
+        textarea {
+            flex: 0 0 80px;
+            background: #1a2332;
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            resize: none;
+        }
+
+        textarea::placeholder {
+            color: #00ff8844;
+        }
+
+        .controls {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        select {
+            flex: 1;
+            min-width: 80px;
+            background: #1a2332;
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            padding: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        button {
+            background: #00ff88;
+            border: none;
+            color: #0a0e27;
+            padding: 10px 12px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            border-radius: 3px;
+            flex: 0 0 auto;
+        }
+
+        button:active {
+            opacity: 0.8;
+        }
+
+        button.danger {
+            background: #ff3333;
+            color: white;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #terminal {
+            flex: 1;
+            background: #0a0e27;
+            border: 1px solid #00ff8844;
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 11px;
+            line-height: 1.4;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            word-break: break-all;
+        }
+
+        .output-line {
+            margin-bottom: 2px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .success {
+            color: #00ff88;
+        }
+
+        .error {
+            color: #ff3333;
+        }
+
+        .warning {
+            color: #ffaa33;
+        }
+
+        .info {
+            color: #88ccff;
+        }
+
+        .loading {
+            color: #ffaa33;
+        }
+
+        .separator {
+            color: #00ff8844;
+            margin: 4px 0;
+        }
+
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #00ff88;
+            border-radius: 2px;
+        }
+
+        @media (min-width: 769px) {
+            body {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>NOVA TERMINAL</h1>
+    </div>
+
+    <div class="container">
+        <textarea id="input" placeholder="Ketik command..." spellcheck="false"></textarea>
+
+        <div class="controls">
+            <select id="mode">
+                <option value="python">Python</option>
+                <option value="shell">Shell</option>
+                <option value="fetch">Fetch</option>
+                <option value="context">Context</option>
+                <option value="search">Search</option>
+            </select>
+            <button id="execute">RUN</button>
+            <button id="clear" class="danger">CLEAR</button>
+        </div>
+
+        <div id="terminal"></div>
+    </div>
+
+    <script>
+        const terminal = document.getElementById('terminal');
+        const input = document.getElementById('input');
+        const modeSelect = document.getElementById('mode');
+        const executeBtn = document.getElementById('execute');
+        const clearBtn = document.getElementById('clear');
+        const BASE_URL = 'https://downloder-amber.vercel.app';
+
+        let isExecuting = false;
+
+        function print(text, type = 'info') {
+            const line = document.createElement('div');
+            line.className = 'output-line ' + type;
+            line.textContent = text;
+            line.style.fontFamily = "'Courier New', monospace";
+            terminal.appendChild(line);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        function printSeparator() {
+            const line = document.createElement('div');
+            line.className = 'output-line separator';
+            line.textContent = '---';
+            line.style.fontFamily = "'Courier New', monospace";
+            terminal.appendChild(line);
+        }
+
+        function analyzeError(errorMsg) {
+            let analysis = [];
+
+            if (errorMsg.includes('SyntaxError')) {
+                analysis.push('SYNTAX ERROR DETECTED');
+                analysis.push('');
+                analysis.push('Common causes:');
+
+                if (errorMsg.includes('unterminated string')) {
+                    analysis.push('- Unclosed quote: Missing closing quote mark');
+                    analysis.push('- Check: Count all " and \' characters');
+                    analysis.push('- Nested quotes: Avoid mixing quote types inside strings');
+                }
+
+                if (errorMsg.includes('invalid syntax')) {
+                    analysis.push('- Invalid operator placement');
+                    analysis.push('- Check: Bracket matching ( ) [ ] { }');
+                    analysis.push('- Check: Colon after if/for/while/def/class');
+                }
+
+                if (errorMsg.includes('unexpected EOF')) {
+                    analysis.push('- Missing closing bracket or parenthesis');
+                    analysis.push('- Check: All opening brackets must have closing');
+                }
+
+                if (errorMsg.includes('indentation')) {
+                    analysis.push('- Indentation error: Inconsistent whitespace');
+                    analysis.push('- Check: Use spaces or tabs, not mixed');
+                    analysis.push('- Check: Indent after colon (:)');
+                }
+            }
+
+            if (errorMsg.includes('NameError')) {
+                analysis.push('NAME ERROR DETECTED');
+                analysis.push('');
+                analysis.push('Issue: Variable or function not defined');
+                analysis.push('Solution:');
+                analysis.push('- Check variable name spelling');
+                analysis.push('- Define variable before using');
+                analysis.push('- Import required modules');
+            }
+
+            if (errorMsg.includes('TypeError')) {
+                analysis.push('TYPE ERROR DETECTED');
+                analysis.push('');
+                analysis.push('Issue: Wrong data type for operation');
+                analysis.push('Solution:');
+                analysis.push('- Check function arguments type');
+                analysis.push('- Verify data structure (list, dict, string)');
+            }
+
+            if (errorMsg.includes('ImportError')) {
+                analysis.push('IMPORT ERROR DETECTED');
+                analysis.push('');
+                analysis.push('Issue: Module not found');
+                analysis.push('Solution:');
+                analysis.push('- Check module name spelling');
+                analysis.push('- Module may not be installed');
+                analysis.push('- Check import syntax: from x import y');
+            }
+
+            return analysis;
+        }
+
+        function displayDetailedError(errorMsg, lineNum, mode) {
+            print('', 'error');
+            print('ERROR REPORT', 'error');
+            printSeparator();
+            print('Mode: ' + mode, 'info');
+            print('Line: ' + lineNum, 'info');
+            print('Error: ' + errorMsg, 'error');
+            print('', 'info');
+
+            const analysis = analyzeError(errorMsg);
+            if (analysis.length > 0) {
+                print('ANALYSIS & SOLUTIONS:', 'warning');
+                analysis.forEach(function(line) {
+                    if (line === '') {
+                        print('', 'info');
+                    } else if (line.includes('DETECTED') || line.includes('ERROR')) {
+                        print(line, 'error');
+                    } else if (line.includes('Solution') || line.includes('Check') || line.includes('Issue')) {
+                        print(line, 'warning');
+                    } else {
+                        print(line, 'info');
+                    }
+                });
+            }
+
+            printSeparator();
+            print('TIP: Copy code to Python IDE for detailed debugging', 'info');
+        }
+
+        executeBtn.addEventListener('click', async function() {
+            if (isExecuting) return;
+
+            const code = input.value.trim();
+            if (!code) {
+                print('ERROR: Input empty!', 'error');
+                return;
+            }
+
+            const mode = modeSelect.value;
+            isExecuting = true;
+            executeBtn.disabled = true;
+
+            const preview = code.length > 40 ? code.substring(0, 40) + '...' : code;
+            print('', 'info');
+            print('EXECUTING: ' + mode.toUpperCase(), 'info');
+            print('Code: ' + preview, 'info');
+            print('Status: Processing...', 'loading');
+
+            try {
+                let url;
+
+                if (mode === 'python') {
+                    url = BASE_URL + '/api?code=' + encodeURIComponent(code) + '&timeout=25';
+                } else if (mode === 'shell') {
+                    url = BASE_URL + '/api?code=' + encodeURIComponent('!' + code) + '&timeout=25';
+                } else if (mode === 'fetch') {
+                    url = BASE_URL + '/api/fetch?url=' + encodeURIComponent(code) + '&parse=auto';
+                } else if (mode === 'context') {
+                    url = BASE_URL + '/api/context';
+                } else if (mode === 'search') {
+                    url = BASE_URL + '/api/search?summary=' + encodeURIComponent(code);
+                }
+
+                if (terminal.lastChild && terminal.lastChild.textContent === 'Status: Processing...') {
+                    terminal.removeChild(terminal.lastChild);
+                }
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (response.ok) {
+                    print('Status: SUCCESS', 'success');
+                    print('', 'info');
+
+                    if (data.output) {
+                        print('OUTPUT:', 'success');
+                        printSeparator();
+                        print(data.output, 'success');
+                        print('', 'info');
+                    }
+
+                    if (data.message) {
+                        print('MESSAGE:', 'success');
+                        printSeparator();
+                        print(data.message, 'success');
+                        print('', 'info');
+                    }
+
+                    if (data.context) {
+                        print('CONTEXT:', 'info');
+                        printSeparator();
+                        print(JSON.stringify(data.context, null, 2), 'info');
+                        print('', 'info');
+                    }
+
+                    if (data.search_data && Array.isArray(data.search_data)) {
+                        print('SEARCH RESULTS:', 'info');
+                        printSeparator();
+                        data.search_data.forEach(function(item) {
+                            print('Title: ' + (item.title || 'N/A'), 'success');
+                            if (item.summary) {
+                                print('Summary: ' + item.summary.substring(0, 100) + '...', 'info');
+                            }
+                            print('', 'info');
+                        });
+                    }
+
+                    if (!data.output && !data.message && !data.context && !data.search_data) {
+                        print('RESPONSE:', 'info');
+                        printSeparator();
+                        print(JSON.stringify(data, null, 2), 'info');
+                        print('', 'info');
+                    }
+                } else {
+                    print('Status: FAILED', 'error');
+                    print('HTTP Code: ' + response.status, 'error');
+                    print('', 'info');
+
+                    if (data.error && data.error.includes('SyntaxError')) {
+                        const lineMatch = data.error.match(/baris (\d+)/);
+                        const lineNum = lineMatch ? lineMatch[1] : 'unknown';
+                        displayDetailedError(data.error, lineNum, mode);
+                    } else if (data.error) {
+                        print('ERROR MESSAGE:', 'error');
+                        printSeparator();
+                        print(data.error, 'error');
+                        print('', 'info');
+
+                        if (data.details) {
+                            print('DETAILS:', 'warning');
+                            print(data.details, 'warning');
+                        }
+
+                        if (data.suggestions && Array.isArray(data.suggestions)) {
+                            print('', 'info');
+                            print('SUGGESTIONS:', 'warning');
+                            data.suggestions.forEach(function(suggestion) {
+                                print('- ' + suggestion, 'warning');
+                            });
+                        }
+                    } else {
+                        print('ERROR:', 'error');
+                        print(JSON.stringify(data, null, 2), 'error');
+                    }
+                }
+            } catch (error) {
+                if (terminal.lastChild && terminal.lastChild.textContent === 'Status: Processing...') {
+                    terminal.removeChild(terminal.lastChild);
+                }
+                print('Status: CONNECTION ERROR', 'error');
+                print('', 'info');
+                print('Message: ' + error.message, 'error');
+                print('', 'info');
+                print('Possible causes:', 'warning');
+                print('- Network unreachable', 'warning');
+                print('- API server down', 'warning');
+                print('- Invalid request format', 'warning');
+            } finally {
+                isExecuting = false;
+                executeBtn.disabled = false;
+            }
+        });
+
+        clearBtn.addEventListener('click', function() {
+            terminal.innerHTML = '';
+            input.value = '';
+            print('Terminal cleared', 'info');
+        });
+
+        input.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                executeBtn.click();
+            }
+        });
+
+        print('Nova Terminal Ready', 'success');
+        print('Ctrl+Enter to execute', 'info');
+    </script>
+</body>
+</html>
